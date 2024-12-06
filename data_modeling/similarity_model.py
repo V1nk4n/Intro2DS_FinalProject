@@ -11,22 +11,30 @@ def load_data():
 
 # Hàm xử lý đề xuất
 def recommend_anime(user_input, data, top_n=10):
+    # Kiểm tra dữ liệu đầu vào
+    if data.empty:
+        return pd.DataFrame()  # Trả về DataFrame rỗng nếu dữ liệu đầu vào rỗng
+
     # Kết hợp các cột thành một chuỗi đặc trưng
     data['combined_features'] = (
-        data['Genres'] + " " +
-        data['Studios'] + " " +
-        data['Producers'] + " " +
-        data['Source']
+        data['Genres'].fillna("") + " " +
+        data['Studios'].fillna("") + " " +
+        data['Producers'].fillna("") + " " +
+        data['Source'].fillna("")
     )
     
+    # Kiểm tra xem cột 'combined_features' có rỗng không
+    if data['combined_features'].str.strip().eq("").all():
+        return pd.DataFrame()  # Trả về DataFrame rỗng nếu tất cả giá trị là trống
+
     # Sử dụng TF-IDF để mã hóa
     vectorizer = TfidfVectorizer(stop_words='english')
-    tfidf_matrix = vectorizer.fit_transform(data['combined_features'])
+    try:
+        tfidf_matrix = vectorizer.fit_transform(data['combined_features'])
+    except ValueError:
+        return pd.DataFrame()  # Trả về DataFrame rỗng nếu xảy ra lỗi
     
     # Tính toán độ tương đồng cosine
-    similarity_matrix = cosine_similarity(tfidf_matrix, tfidf_matrix)
-    
-    # Tìm phim tương tự dựa trên tiêu chí của người dùng
     user_vector = vectorizer.transform([user_input])
     user_similarity = cosine_similarity(user_vector, tfidf_matrix).flatten()
     
@@ -35,26 +43,27 @@ def recommend_anime(user_input, data, top_n=10):
     recommendations = data.iloc[similar_indices]
     return recommendations
 
+
 # Load dữ liệu
 anime_data = load_data()
 
 # Giao diện Streamlit
 st.title("Hệ thống đề xuất Anime")
-st.write("Chọn các thuộc tính để tìm phim tương tự!")
+st.write("Chọn ít nhất một trong các thuộc tính sau để tìm phim tương tự!")
 
 # Lựa chọn đầu vào từ người dùng
 title = st.text_input("Nhập tiêu đề (Title):", placeholder="Ví dụ: Attack on Titan")
-genres = st.text_input("Nhập thể loại (Genres):", placeholder="Ví dụ: Action, Comedy")
-studios = st.text_input("Nhập studio (Studios):", placeholder="Ví dụ: Madhouse, Kyoto Animation")
-producers = st.text_input("Nhập nhà sản xuất (Producers):", placeholder="Ví dụ: Aniplex, Toei Animation")
-source = st.selectbox("Chọn nguồn tài liệu (Source):", anime_data['Source'].unique())
+genres = st.selectbox("Nhập thể loại (Genres):", [""] + list(anime_data['Genres'].unique()))
+studios = st.selectbox("Nhập studio (Studios):", [""] + list(anime_data['Studios'].unique()))
+producers = st.selectbox("Nhập nhà sản xuất (Producers):", [""] + list(anime_data['Producers'].unique()))
+source = st.selectbox("Chọn nguồn tài liệu (Source):", [""] + list(anime_data['Source'].unique()))
 min_score = st.slider("Chọn điểm số tối thiểu:", min_value=0.0, max_value=10.0, step=0.1)
-max_episodes = st.slider("Số tập tối đa:", min_value=1, max_value=200, step=1)
-min_scored_by = st.slider("Số lượng đánh giá tối thiểu:", min_value=0, max_value=int(anime_data['Scored By'].max()), step=1000)
+max_episodes = st.slider("Số tập tối đa:", min_value=1, max_value=4000, step=1)
+min_scored_by = st.slider("Số lượng đánh giá tối thiểu:", min_value=0, max_value=3000000, step=1000)
 
 # Nút để bắt đầu tìm kiếm
 if st.button("Đề xuất"):
-    if not title and not genres and not studios and not producers:
+    if not title.strip() and genres == "" and studios == "" and producers == "" and source == "":
         st.warning("Bạn cần nhập ít nhất một trường để hệ thống đề xuất chính xác!")
     else:
         # Tạo chuỗi đầu vào người dùng
@@ -69,13 +78,15 @@ if st.button("Đề xuất"):
         ]
         
         # Nếu người dùng nhập tiêu đề, ưu tiên lọc theo tiêu đề trước
-        if title:
+        if title.strip():
             filtered_data = filtered_data[filtered_data['Title'].str.contains(title, case=False, na=False)]
         
         # Gợi ý phim dựa trên dữ liệu đã lọc
         recommendations = recommend_anime(user_input, filtered_data)
         
-        if not recommendations.empty:
+        if recommendations.empty:
+            st.warning("Không tìm thấy phim nào phù hợp! Vui lòng thay đổi tiêu chí.")
+        else:
             st.write("Phim được đề xuất:")
             for _, row in recommendations.iterrows():
                 st.write(f"""
@@ -86,6 +97,5 @@ if st.button("Đề xuất"):
                     - Nguồn gốc: {row['Source']}  
                     - Điểm số: {row['Score']}  
                     - Số lượt đánh giá: {row['Scored By']}  
+                    - Số tập: {row['Episodes']}  
                 """)
-        else:
-            st.write("Không tìm thấy phim nào phù hợp!")
