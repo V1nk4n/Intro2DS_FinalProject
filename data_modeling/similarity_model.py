@@ -6,7 +6,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 # Load dataset
 @st.cache_data
 def load_data():
-    data = pd.read_csv('anime_preprocessing.csv')
+    data = pd.read_csv('./data/anime_preprocessing.csv')
     return data
 
 # Hàm xử lý đề xuất
